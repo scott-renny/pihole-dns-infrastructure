@@ -1,0 +1,225 @@
+# Phase 2 — Full Network Rollout
+
+Status: **In Progress**
+
+Phase 1 validated Pi-hole on 2 personal devices by manually changing each
+device's DNS settings. That doesn't scale and misses devices that can't be
+easily configured — smart TVs, IoT sensors, game consoles, and guest
+devices. Phase 2 moves DNS resolution to the router's DHCP server so every
+device on the network is covered automatically, with zero per-device setup.
+
+---
+
+## Why Router DHCP Instead of Per-Device
+
+| Approach | Coverage | Effort Per New Device |
+|---|---|---|
+| Per-device DNS (Phase 1) | Only configured devices | Manual, every time |
+| **Router DHCP DNS (Phase 2)** | Every device automatically | Zero — inherited from DHCP |
+| Pi-hole's own DHCP server | Every device automatically | Zero, but requires disabling router's DHCP |
+
+This lab uses **router DHCP DNS override** — non-destructive, reversible in
+one click, and doesn't require disabling the router's own DHCP server.
+
+---
+
+## Step 1 — Confirm Pi-hole Has a Static IP
+
+Before touching the router, Pi-hole's IP must never change. If it shifts
+after a reboot, every device on the network loses DNS simultaneously.
+
+```bash
+ip a show eth0
+cat /etc/netplan/*.yaml
+```
+
+Either set a static IP on the Ubuntu host directly, or create a DHCP
+reservation on the router tying Pi-hole's MAC address to its current IP
+permanently. Skipping this is the most common cause of "the whole network
+lost internet" after a Pi-hole DHCP rollout.
+
+---
+
+## Step 2 — Find the DHCP DNS Setting on Your Router
+
+| Router Brand | Typical Menu Path |
+|---|---|
+| Asus | LAN → DHCP Server → DNS Server 1 |
+| Netgear | Advanced → Setup → LAN Setup → Use This DNS Server |
+| TP-Link | Advanced → Network → DHCP Server → Primary DNS |
+| Ubiquiti / UniFi | Settings → Networks → (LAN) → DHCP Name Server |
+| ISP-provided router | Varies — look for "DHCP" or "LAN Setup"; some ISP routers restrict this |
+
+---
+
+## Step 3 — Set Primary DNS to Pi-hole, Secondary as Fallback
+
+```
+Primary DNS Server   = <your Pi-hole static IP>
+Secondary DNS Server = 1.1.1.1   # fallback ONLY if Pi-hole is down
+```
+
+> **Nuance:** some devices treat secondary DNS as a load-balanced
+> alternative rather than a strict fallback — meaning some queries may
+> bypass Pi-hole entirely. For maximum blocking coverage, some builders set
+> secondary DNS to Pi-hole's own IP again, accepting that DNS fails
+> completely if Pi-hole goes down. This lab prioritises uptime over maximum
+> blocking by using 1.1.1.1 as secondary — document whichever tradeoff you
+> choose.
+
+*(Screenshot to add here once captured: router DHCP config screen showing
+Primary DNS set to Pi-hole's IP — `screenshots/12-router-dhcp-config.png`)*
+
+---
+
+## Step 4 — Force Devices to Pick Up the New Setting
+
+Devices don't adopt new DHCP settings until their lease renews.
+
+```bash
+# Windows
+ipconfig /release
+ipconfig /renew
+
+# macOS / Linux
+sudo dhclient -r && sudo dhclient
+
+# Phones / smart TVs / consoles
+# Toggle Wi-Fi off and back on, or reboot the device
+```
+
+---
+
+## Step 5 — Verify Network-Wide Adoption
+
+```bash
+# From any client device:
+nslookup doubleclick.net
+# Server: <Pi-hole IP>
+# Address: 0.0.0.0   <- confirms this client is using Pi-hole
+```
+
+In the Pi-hole dashboard, check **Settings → Network** — it should now list
+every device on the LAN, not just the 2 manually configured ones from Phase
+1. The "Active clients" count on the main dashboard should rise to match
+total devices on the network.
+
+*(Screenshot to add here once captured: dashboard showing active client
+count matching full device count — `screenshots/13-active-clients-full-network.png`)*
+
+---
+
+## DNS Failover — What Happens If Pi-hole Goes Down
+
+Once every device depends on Pi-hole for DNS, a crash, power loss, or
+stopped container means the **entire network** loses the ability to resolve
+any domain — not just ad blocking, all internet access breaks for every
+device.
+
+**Mitigation 1 — Secondary DNS fallback** (configured in Step 3 above).
+Exact failover behaviour varies by OS and isn't instant.
+
+**Mitigation 2 — Auto-restart the container** (already in this repo's
+`docker-compose.yml`):
+
+```yaml
+services:
+  pihole:
+    restart: unless-stopped
+```
+
+**Mitigation 3 — Uptime monitoring:**
+
+```bash
+crontab -e
+
+# Checks every 5 minutes, logs if Pi-hole stops resolving
+*/5 * * * * dig @127.0.0.1 google.com +short || echo "Pi-hole DOWN at $(date)" >> /home/$USER/pihole-downtime.log
+```
+
+---
+
+## IoT, Guest Network & Devices That Resist DNS Changes
+
+Some devices ignore DHCP-provided DNS and hardcode their own (common on
+smart speakers, some streaming sticks, and IoT sensors shipped with Google
+or Cloudflare DNS baked in for reliability).
+
+**Detecting these devices:**
+
+```bash
+sudo tcpdump -i eth0 'udp port 53 and dst host 8.8.8.8'
+```
+
+Any device shown here is bypassing Pi-hole entirely. Fixing this typically
+requires a router-level DNS redirect (intercepting all outbound port 53
+traffic regardless of destination) — more invasive and router-dependent,
+worth pursuing only if specific devices are confirmed to be bypassing
+Pi-hole.
+
+**Guest network decision:**
+
+| Network | Recommendation | Reasoning |
+|---|---|---|
+| Main LAN | Route through Pi-hole | Trusted devices, full benefit of blocking/visibility |
+| Guest network | Keep on default/ISP DNS | Network segmentation — don't expose internal infrastructure to untrusted guest devices |
+| IoT VLAN (if configured) | Route through Pi-hole | IoT devices benefit most from blocking telemetry/tracking |
+
+---
+
+## Apps, Streaming Services & YouTube — What Actually Works
+
+Testing ad blocking on streaming apps and YouTube specifically revealed an
+important structural limitation worth documenting honestly rather than
+overselling.
+
+| Platform | DNS Blocking Result | Why |
+|---|---|---|
+| Roku (ads/telemetry) | Works well | Ad servers separate from content delivery |
+| Samsung Smart TV (ads/telemetry) | Works well | Ad/tracking domains isolated from app function |
+| Mobile apps (general ads) | Works well | Most ad SDKs use dedicated ad-serving domains |
+| Amazon Prime Video | Partial | Some ad domains separate, some bundled with content |
+| Hulu / Paramount+ | Inconsistent | Ad infrastructure changes frequently |
+| **YouTube** | **Does not work reliably** | Video and ads both stream from `googlevideo.com` — same domain |
+| **Netflix** | **Does not work** | No DNS-level ad domains exist; ads are server-side inserted |
+
+YouTube ad-blocking regex lists circulating online either fail to block
+ads at all or block so aggressively that videos refuse to play. Google
+deliberately rotates these subdomains to defeat this kind of filtering —
+this was not added to this lab's blocklists.
+
+For YouTube specifically, device-level tools are what actually work:
+ReVanced (Android, patches the app directly), SmartTube (Android TV
+alternative client), or uBlock Origin (desktop browser). These operate
+outside DNS entirely and are a deliberate complement to this lab, not a
+replacement for it.
+
+**Smart TV telemetry blocklist used in this lab** (safe — does not touch
+content-serving domains):
+
+```bash
+docker exec -it pihole bash
+
+pihole-FTL sqlite3 /etc/pihole/gravity.db \
+  "INSERT INTO adlist (address, enabled, comment) VALUES \
+  ('https://raw.githubusercontent.com/AnimAlmamun/blocklist/master/SmartTV-AGH.txt', 1, 'SmartTV-Telemetry');"
+
+pihole -g
+```
+
+---
+
+## Phase 2 Rollout Checklist
+
+- [ ] Pi-hole server has a static IP or DHCP reservation
+- [ ] Router DHCP Primary DNS set to Pi-hole's IP
+- [ ] Secondary DNS set as a deliberate, documented failover choice
+- [ ] Auto-restart confirmed on the Pi-hole container (`restart: unless-stopped`)
+- [ ] Uptime monitoring cron job added
+- [ ] Verified active client count rises to match all devices
+- [ ] Identified and handled any hardcoded-DNS devices
+- [ ] Decided and documented guest network DNS policy
+- [ ] Added smart TV telemetry blocklist; confirmed it does not break streaming apps
+- [ ] Documented YouTube/Netflix DNS limitation honestly
+
+← Back to [Phase 1 — Deployment & Troubleshooting](PHASE1-troubleshooting.md)
