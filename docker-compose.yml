@@ -1,0 +1,80 @@
+version: "3.9"
+
+# Pi-hole DNS Sinkhole — Home Lab
+# Phase 1: Single-server deployment, validated on 2 devices (COMPLETE)
+# Phase 2: Full network rollout via router DHCP (IN PROGRESS — see docs/PHASE2-network-rollout.md)
+#
+# Before running: copy .env.example to .env and fill in your own values.
+# Never commit .env to version control — it is already in .gitignore.
+
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    restart: unless-stopped   # auto-restarts on crash or host reboot — see docs/PHASE2-network-rollout.md "Failover"
+
+    ports:
+      - "53:53/tcp"          # DNS TCP
+      - "53:53/udp"          # DNS UDP
+      - "${PIHOLE_WEBPORT:-8081}:80/tcp"   # Web admin UI — remapped from 80 due to port conflict (see docs/PHASE1-troubleshooting.md Problem 2)
+
+    environment:
+      TZ: "${TZ:-America/New_York}"
+      WEBPASSWORD: "${WEBPASSWORD}"        # Set in .env — never hardcode here
+
+      # Upstream DNS resolvers
+      PIHOLE_DNS_1: "1.1.1.1"
+      PIHOLE_DNS_2: "8.8.8.8"
+
+      # DNSSEC and hardening
+      DNSSEC: "true"                      # NOTE: env var alone is insufficient in Pi-hole v6 —
+                                            # see docs/PHASE1-troubleshooting.md Problem 6 and
+                                            # volumes/pihole/etc-dnsmasq.d/99-dnssec.conf
+      DNS_BOGUS_PRIV: "true"
+      DNS_FQDN_REQUIRED: "true"
+      DNSMASQ_LISTENING: "all"
+
+      BLOCKING_ENABLED: "true"
+
+      # Fix permission errors on mounted volumes — see docs/PHASE1-troubleshooting.md Problem 3
+      PIHOLE_UID: "${PIHOLE_UID:-1000}"
+      PIHOLE_GID: "${PIHOLE_GID:-1000}"
+
+      ADMIN_EMAIL: ""
+
+    # Top-level DNS block — gives the container DNS resolution during its own
+    # startup/health check (see docs/PHASE1-troubleshooting.md Problem 3)
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+    volumes:
+      - "./volumes/pihole/etc-pihole:/etc/pihole"
+      - "./volumes/pihole/etc-dnsmasq.d:/etc/dnsmasq.d"
+
+    cap_add:
+      - NET_ADMIN
+
+    networks:
+      pihole_net:
+        ipv4_address: 172.20.0.2
+
+  # Optional: Unbound as a local recursive resolver (no third-party DNS dependency)
+  # Uncomment to replace 1.1.1.1/8.8.8.8 with a fully self-hosted resolver chain.
+  #
+  # unbound:
+  #   container_name: unbound
+  #   image: mvance/unbound:latest
+  #   restart: unless-stopped
+  #   networks:
+  #     pihole_net:
+  #       ipv4_address: 172.20.0.3
+  #   volumes:
+  #     - "./volumes/unbound:/opt/unbound/etc/unbound"
+
+networks:
+  pihole_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
