@@ -1,0 +1,18 @@
+# Never commit real secrets or runtime data
+.env
+volumes/pihole/etc-pihole/*
+volumes/pihole/etc-dnsmasq.d/*
+!volumes/pihole/etc-dnsmasq.d/99-dnssec.conf
+volumes/unbound/
+
+# Logs
+*.log
+pihole-downtime.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Editor noise
+.vscode/
+*.swp
