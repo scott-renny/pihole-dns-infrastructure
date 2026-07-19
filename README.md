@@ -1,121 +1,199 @@
-# Pi-hole DNS Sinkhole — Home Lab
+# 🛡️ Pi-hole DNS Infrastructure Project
 
-![Phase 1](https://img.shields.io/badge/Phase%201-Complete-success)
-![Phase 2](https://img.shields.io/badge/Phase%202-In%20Progress-yellow)
-![Platform](https://img.shields.io/badge/Platform-Ubuntu%2022.04-orange)
-![Docker](https://img.shields.io/badge/Docker-Compose-blue)
+## Enterprise DNS Filtering with Pi-hole, Docker & Ubuntu Server
 
-## Objective
+> [!IMPORTANT]
+> ### 📦 Legacy Engineering Portfolio Project
+>
+> This repository documents one of the infrastructure engineering projects I completed while developing my home lab.
+>
+> Rather than deleting or replacing it, I have intentionally preserved it as part of my **Legacy Project Archive** to document my growth as an infrastructure and cybersecurity engineer.
+>
+> This project demonstrates the deployment of a Docker-based Pi-hole DNS sinkhole integrated into an existing Ubuntu Server already hosting Wazuh SIEM, ModSecurity, and Nginx.
+>
+> Every troubleshooting step, deployment issue, engineering decision, and lesson learned has been preserved to document the engineering process—not just the finished solution.
+>
+> My current engineering efforts are focused on:
+>
+> - 🛡️ Cyber Operations Center Engineering Program *(Flagship Project)*
+> - 🏗️ Project Atlas
+> - 🐉 Project Hydra
+> - 🏛️ Project Olympus
+> - 🔥 Project Hestia
 
-Deploy a network-level DNS sinkhole on Ubuntu Server using Docker, validate it
-on individual devices, then roll it out network-wide via router DHCP. This
-lab was deployed on a server already running a Wazuh SIEM stack and a
-ModSecurity/Nginx WAF — a real multi-service integration challenge, not a
-blank-slate install.
+---
 
-![Pi-hole dashboard](screenshots/09-dashboard-live.png)
+![Status](https://img.shields.io/badge/Status-Legacy_Project-6f42c1)
+![Platform](https://img.shields.io/badge/Platform-Ubuntu%2022.04-E95420)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
+![Portfolio](https://img.shields.io/badge/Portfolio-Historical_Project-blue)
 
-## Status
+# Project Overview
 
-**Phase 1 — Complete.** Pi-hole deployed in Docker, six real deployment
-problems diagnosed and resolved, DNSSEC validated, manually tested on 2
-personal devices.
+This project documents the deployment of a Docker-based Pi-hole DNS sinkhole inside an existing multi-service Ubuntu Server environment. Rather than deploying Pi-hole on a blank server, the objective was to integrate DNS filtering alongside Wazuh SIEM, ModSecurity, Nginx, Docker, and existing firewall rules while maintaining service stability.
 
-**Phase 2 — In progress.** Rolling Pi-hole out as the default DNS resolver
-for the entire home network via router DHCP, covering every device
-automatically without per-device configuration.
+## Project at a Glance
 
-## Results So Far
-
-- 85,222 domains on blocklist (StevenBlack + URLhaus malware feed + smart TV telemetry list)
-- DNSSEC validated — confirmed via the `ad` (Authenticated Data) flag in `dig` output
-- 6 deployment problems identified from real error output and resolved (see below)
-- Smart TV / mobile ad and telemetry domains blocked cleanly
-- YouTube and Netflix ad blocking tested and confirmed **not reliably possible** via DNS — documented honestly with the technical reason (same-domain ad insertion)
-
-## Repository Structure
-
-```
-pihole-dns-lab/
-├── README.md                          this file
-├── docker-compose.yml                 sanitized compose file (uses .env, no hardcoded secrets)
-├── .env.example                       template — copy to .env and fill in your own values
-├── .gitignore                         excludes .env, runtime volumes, logs
-├── setup.sh                           automated setup script, encodes all Phase 1 fixes
-├── screenshots/                       11 evidence screenshots (IP/password/hostname masked)
-├── volumes/pihole/etc-dnsmasq.d/
-│   └── 99-dnssec.conf                 the actual config file that fixed DNSSEC validation
-└── docs/
-    ├── PHASE1-troubleshooting.md      full breakdown of all 6 problems + fixes
-    └── PHASE2-network-rollout.md      router DHCP rollout, failover, IoT handling
-```
-
-## Quick Start
-
-```bash
-git clone <this-repo>
-cd pihole-dns-lab
-chmod +x setup.sh
-./setup.sh
-```
-
-The script handles `.env` creation, YAML validation, the port 53 conflict,
-Docker installation, firewall rules, and deployment — all fixes from Phase 1
-are built in so you don't have to rediscover them.
-
-## Environment
-
-| Component | Detail |
+| Category | Details |
 |---|---|
-| Host OS | Ubuntu Server 22.04 LTS |
-| Containerisation | Docker + Docker Compose |
-| Pi-hole version | pihole/pihole:latest (v6.x) |
-| Upstream DNS | Cloudflare 1.1.1.1 + Google 8.8.8.8 |
-| DNSSEC | Enabled and validated |
-| Pre-existing services | Wazuh SIEM, ModSecurity/Nginx WAF |
-| Web UI port | 8081 (80 was already in use) |
+| Project Type | Infrastructure Engineering |
+| Status | Legacy Portfolio Project |
+| Platform | Ubuntu Server 22.04 LTS |
+| Deployment | Docker |
+| Focus | DNS Security |
+| Documentation | Complete |
+| Troubleshooting | Documented |
+| Engineering Phases | 2 |
 
-## The Six Problems (Phase 1)
+# Architecture
 
-| # | Problem | Root Cause | Fix |
-|---|---------|-----------|-----|
-| 1 | YAML parse error at line 38 | Indentation error in `ports:` block | Fixed indent; validated with `docker compose config` |
-| 2 | Port 80 already allocated | Existing Nginx WAF owned host port 80 | Remapped Pi-hole web UI to port 8081 |
-| 3 | Container unhealthy, DNS unavailable | UID mismatch on mounted volumes | Added `PIHOLE_UID`/`PIHOLE_GID` + top-level `dns:` block |
-| 4 | `pihole -a adlist add` silent failure | Command removed in Pi-hole v6 | Used `pihole-FTL sqlite3` to insert directly into `gravity.db` |
-| 5 | Web UI unreachable on port 8081 | UFW not allowing the new port | `sudo ufw allow 8081/tcp` |
-| 6 | DNSSEC set to `true` but `ad` flag missing | Env var alone insufficient in v6 | Added explicit `99-dnssec.conf` to `dnsmasq.d` |
+```text
+                    Internet
+                        │
+                        ▼
+                Router / Firewall
+                        │
+                        ▼
+                Ubuntu Server 22.04
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+        ▼               ▼                ▼
+    Pi-hole         Wazuh SIEM      ModSecurity
+ DNS Filtering      Monitoring      + Nginx WAF
+        │
+        ▼
+ Home Network Devices
+```
 
-Full diagnosis, screenshots, and exact commands for each: [docs/PHASE1-troubleshooting.md](docs/PHASE1-troubleshooting.md)
+# Engineering Decisions
 
-## What's Next (Phase 2)
+- **Docker** for service isolation, portability, and easier maintenance.
+- **Pi-hole** for mature DNS filtering and DNSSEC support.
+- **Cloudflare + Google DNS** for resilient upstream resolution.
+- **Integration with an existing server** to simulate real infrastructure instead of a clean installation.
 
-Moving from 2 manually-configured devices to full network coverage via
-router DHCP, including failover planning for what happens if Pi-hole goes
-down, and handling devices (IoT, smart TVs) that hardcode their own DNS.
+# Key Accomplishments
 
-Full plan: [docs/PHASE2-network-rollout.md](docs/PHASE2-network-rollout.md)
+- Successfully deployed Pi-hole using Docker.
+- Integrated DNS filtering into an existing security stack.
+- Validated DNSSEC.
+- Diagnosed and resolved six deployment issues.
+- Built reusable deployment automation.
+- Produced repeatable documentation.
 
-## Known Limitations (Documented Honestly)
+# Technologies Used
 
-DNS-level filtering cannot block ads on platforms that serve ads and content
-from the same domain — most notably YouTube and Netflix. This is not a
-missing blocklist; it's a structural limit of the OSI layer at which DNS
-operates. Smart TV platform telemetry (Roku, Samsung, LG ad/tracking
-domains) blocks reliably because those domains are kept separate from
-content delivery.
+- Ubuntu Server
+- Docker & Docker Compose
+- Pi-hole
+- DNSSEC
+- UFW
+- Wazuh
+- ModSecurity
+- Nginx
+- Cloudflare DNS
+- Google Public DNS
 
-## Security+ SY0-701 Coverage
+# Skills Demonstrated
 
-| Activity | Domain | Objective |
-|---|---|---|
-| DNS sinkhole as defensive control | D4 — Network Security | 4.4 — Network hardening |
-| DNSSEC validation | D4 — Network Security | 4.5 — DNS attacks |
-| Router DHCP rollout | D4 — Network Security | 4.1 — Network architecture |
-| Single point of failure mitigation | D5 — Program Management | 5.2 — Risk management |
-| URLhaus threat intel feed | D2 — Vulnerabilities | 2.1 — Threat intelligence |
-| Docker container isolation | D3 — Architecture | 3.1 — Secure infrastructure |
+- Linux Administration
+- Infrastructure Engineering
+- DNS Administration
+- Docker
+- Network Security
+- Secure Configuration
+- Troubleshooting
+- Technical Documentation
+- Deployment Automation
 
-## License
+# Repository Structure
 
-MIT — use freely for your own home lab.
+```text
+pihole-dns-lab/
+├── README.md
+├── docker-compose.yml
+├── setup.sh
+├── .env.example
+├── screenshots/
+├── docs/
+└── volumes/
+```
+
+# Project Results
+
+- 85,000+ blocked domains
+- DNSSEC validated
+- Six documented deployment incidents
+- Smart TV telemetry blocked
+- Malware blocklists integrated
+- Successfully integrated with an existing security infrastructure
+
+# Engineering Challenges
+
+- Existing services occupied required ports.
+- DNSSEC required manual configuration.
+- Pi-hole v6 removed documented commands.
+- Docker networking required troubleshooting.
+- Firewall rules required modification.
+
+# Documentation
+
+Includes deployment guides, troubleshooting documentation, screenshots, configuration files, rollout planning, and lessons learned.
+
+# Retrospective
+
+If I rebuilt this project today I would:
+
+- Deploy redundant Pi-hole instances
+- Add automatic backups
+- Implement DNS over HTTPS/TLS
+- Add health monitoring
+- Integrate centralized dashboards
+- Automate configuration management
+
+# Future Improvements
+
+Potential enhancements:
+
+- High Availability DNS
+- Grafana dashboards
+- Discord alerting
+- Automated health checks
+- Configuration management
+
+# Security+ Coverage
+
+- Network Security
+- DNS Security
+- Secure Infrastructure
+- Threat Intelligence
+- Risk Management
+
+# Engineering Philosophy
+
+Every project in my Legacy Project Archive has been preserved intentionally.
+
+Rather than showcasing only polished final results, I believe documenting failures, troubleshooting, and engineering decisions provides a more accurate representation of how real-world infrastructure is built and maintained.
+
+These repositories represent the foundation upon which my current engineering portfolio has been built.
+
+# Current Engineering Focus
+
+- 🛡️ Cyber Operations Center Engineering Program *(Flagship Project)*
+- 🏗️ Project Atlas
+- 🐉 Project Hydra
+- 🏛️ Project Olympus
+- 🔥 Project Hestia
+
+# License
+
+MIT License
+
+# Author
+
+## Scott Renny
+
+**Aspiring SOC Analyst • Infrastructure Engineer • Home Lab Builder**
+
+*"Building enterprise infrastructure one project at a time while continuously learning, improving, and documenting the journey."*
