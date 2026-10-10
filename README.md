@@ -49,6 +49,8 @@ This project documents the deployment of a Docker-based Pi-hole DNS sinkhole ins
 
 # Architecture
 
+A detailed view of the container, network and DNS query path is in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ```text
                     Internet
                         │
