@@ -1,4 +1,18 @@
-# 🛡️ Pi-hole DNS Infrastructure Project
+<div align="center">
+
+# Pi-hole DNS Infrastructure
+### DNS Filtering · Docker · Ubuntu Server
+
+![status: legacy project](https://img.shields.io/badge/status-legacy%20project-64748b?style=flat-square)
+![platform: Ubuntu](https://img.shields.io/badge/platform-Ubuntu-2563eb?style=flat-square)
+
+[Architecture](ARCHITECTURE.md) · [License](LICENSE)
+
+</div>
+
+[Enterprise DNS Filtering with Pi-hole, Docker & Ubuntu Server](#enterprise-dns-filtering-with-pi-hole-docker--ubuntu-server) · [Project Overview](#project-overview) · [Project at a Glance](#project-at-a-glance) · [Architecture](#architecture) · [Engineering Decisions](#engineering-decisions) · [Key Accomplishments](#key-accomplishments)
+
+---
 
 ## Enterprise DNS Filtering with Pi-hole, Docker & Ubuntu Server
 
@@ -25,10 +39,6 @@
 
 ---
 
-![Status](https://img.shields.io/badge/Status-Legacy_Project-6f42c1)
-![Platform](https://img.shields.io/badge/Platform-Ubuntu%2022.04-E95420)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
-![Portfolio](https://img.shields.io/badge/Portfolio-Historical_Project-blue)
 
 # Project Overview
 
